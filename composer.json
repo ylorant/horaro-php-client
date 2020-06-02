@@ -1,0 +1,25 @@
+{
+    "name": "ylorant/horaro-php-client",
+    "description": "Horaro API PHP client library",
+    "type": "library",
+    "license": "MIT",
+    "version": "1.0",
+    "require": {
+        "ext-curl": "^7.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.1"
+    },
+    "authors": [
+        {
+            "name": "Yohann Lorant",
+            "email": "yohann.lorant@gmail.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Horaro\\": "src/",
+            "Horaro\\Tests\\": "tests/"
+        }
+    }
+}

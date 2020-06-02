@@ -1,0 +1,23 @@
+<phpunit bootstrap="vendor/autoload.php">
+    <!-- Settings as constants -->
+    <php>
+    </php>
+
+    <!-- Test suites -->
+    <testsuites>
+        <testsuite name="tests">
+            <directory>tests</directory>
+        </testsuite>
+    </testsuites>
+    
+    <!-- Code coverage -->
+    <logging>
+        <log type="coverage-html" target="tests/_reports/coverage" />
+    </logging>
+
+    <filter>
+        <whitelist processUncoveredFilesFromWhitelist="true">
+            <directory suffix=".php">src</directory>
+        </whitelist>
+    </filter>
+</phpunit>
