@@ -130,7 +130,7 @@ class Client
                 if (!isset($data->data) && !empty($data->links)) {
                     $this->queryAsync(
                         self::HORARO_HOST . $data->links[0]->uri,
-                        [],
+                        $request['params'],
                         $request['cb'],
                         $request['cbParams']
                     );
@@ -171,7 +171,7 @@ class Client
         $curl = $this->buildQuery($url, $parameters);
 
         // Store the async request for ulterior checks
-        $this->asyncRequests[] = ['curl' => $curl, 'cb' => $callback, 'cbParams' => $cbParameters];
+        $this->asyncRequests[] = ['curl' => $curl, 'params' => $parameters, 'cb' => $callback, 'cbParams' => $cbParameters];
 
         curl_multi_add_handle($this->multiCurl, $curl);
     }
@@ -200,7 +200,7 @@ class Client
 
         // If no data has been returned but there's still links, then we're redirected to the ID based event.
         if (!isset($data->data) && !empty($data->links)) {
-            return $this->query(self::HORARO_HOST . $data->links[0]->uri);
+            return $this->query(self::HORARO_HOST . $data->links[0]->uri, $parameters);
         }
         
         // Return false if no data is present in the reply (for example Internet is not accessible)
@@ -289,7 +289,7 @@ class Client
      * This method gets the available schedules for a defined event ID.
      *
      * @param string $eventId The event ID.
-     * @param array $parameters Additional filters, for example for pagination.
+     * @param array $parameters Additional filters, for example for pagination (parameter "offset").
      *
      * @return array A list of the schedules for the given event.
      */
@@ -307,15 +307,22 @@ class Client
      *
      * @param string $scheduleId The schedule ID.
      * @param string $eventId The event ID. Using it or not will change the called method.
+     * @param string $hiddenKey Key to get the hidden columns.
      *
      * @return object The schedule.
      */
-    public function getSchedule($scheduleId, $eventId = null)
+    public function getSchedule($scheduleId, $eventId = null, $hiddenKey = null)
     {
+        $parameters = [];
+
+        if(!empty($hiddenKey)) {
+            $parameters['hiddenkey'] = $hiddenKey;
+        }
+
         if (!empty($eventId)) {
-            return $this->query("/events/" . $eventId . "/schedules/" . $scheduleId);
+            return $this->query("/events/" . $eventId . "/schedules/" . $scheduleId, $parameters);
         } else {
-            return $this->query("/schedules/" . $scheduleId);
+            return $this->query("/schedules/" . $scheduleId, $parameters);
         }
     }
 
@@ -348,10 +355,16 @@ class Client
      */
     public function getScheduleAsync($scheduleId, $eventId = null, $hiddenKey = null, $callback = null)
     {
+        $parameters = [];
+
+        if(!empty($hiddenKey)) {
+            $parameters['hiddenkey'] = $hiddenKey;
+        }
+
         if (!empty($eventId)) {
             $this->queryAsync(
                 "/events/" . $eventId . "/schedules/" . $scheduleId,
-                [],
+                $parameters,
                 $callback,
                 [$scheduleId, $eventId]
             );
