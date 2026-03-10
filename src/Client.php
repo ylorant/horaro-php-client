@@ -2,33 +2,49 @@
 
 namespace Horaro;
 
+use CurlHandle;
+use CurlMultiHandle;
+
 /**
  * Class Horaro
  * @package HedgeBot\Core\Service\Horaro
  */
 class Client
 {
+    /** @var string Horaro host selector: legacy website (.org) */
+    const HOST_LEGACY = "legacy";
+    /** @var string Horaro host selector: new website (.net) */
+    const HOST_NEW = "new";
     /** @var string Horaro host URL */
-    const HORARO_HOST = "https://horaro.org";
+    const HORARO_HOST = [
+        self::HOST_LEGACY => "https://horaro.org",
+        self::HOST_NEW => "https://horaro.net"
+    ];
     /** @var string Full Horaro API location URL, build with help from HORARO_HOST */
-    const HORARO_BASEURL = self::HORARO_HOST . "/-/api/v1/";
+    const HORARO_BASEPATH = "/-/api/v1/";
     /** @var string The mimetype expected for return values. Will be used in the "Accept" header. */
     const RETURN_MIMETYPE = "application/json";
 
-    /** @var Resource Multi curl resource, for async requests */
+    /** @var CurlMultiHandle Multi curl resource, for async requests */
     protected $multiCurl;
     /** @var array List of the currently pending asynchronous requests. */
     protected $asyncRequests;
     /** @var callable The callback that will be called when an error occured (error handler). */
     protected $errorHandler;
+    /** @var string The type of horaro website that will be queried */
+    protected $hostType;
 
     /** Constructor.
      * The constructor initializes the curl asynchronous handler.
+     * 
+     * @param string $hostType The host to use in calls made by this client
      */
-    public function __construct()
+    public function __construct(string $hostType = self::HOST_NEW)
     {
         $this->asyncRequests = [];
         $this->multiCurl = curl_multi_init();
+
+        $this->hostType = $hostType;
     }
 
     /** Sets the error handler for the async requests.
@@ -129,7 +145,7 @@ class Client
                 //we chain another async query for the referred URL
                 if (!isset($data->data) && !empty($data->links)) {
                     $this->queryAsync(
-                        self::HORARO_HOST . $data->links[0]->uri,
+                        self::HORARO_HOST[$this->hostType] . $data->links[0]->uri,
                         $request['params'],
                         $request['cb'],
                         $request['cbParams']
@@ -189,8 +205,29 @@ class Client
     public function query($url, array $parameters = [])
     {
         $curl = $this->buildQuery($url, $parameters);
+        $parsedHeaders = [];
+
+        curl_setopt($curl, CURLOPT_HEADERFUNCTION, function($curl, $headerLine) use(&$parsedHeaders) {
+            $trimmed = trim($headerLine);
+
+            if(!empty($trimmed)) {
+                $split   = explode(':', $trimmed);
+
+                if(!empty($split[1])) {
+                    $parsedHeaders[$split[0]] = trim($split[1]);
+                }
+            }
+
+            return strlen($headerLine);
+        });
 
         $reply = curl_exec($curl);
+        $replyCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+
+        if ($replyCode == 302 && empty($data)) {
+            return $this->query(self::HORARO_HOST[$this->hostType] . $parsedHeaders['location'], $parameters);
+        }
+
         $data = json_decode($reply);
 
         // If there's a status replied and it's not 200 (HTTP OK), then it's an error and we return false
@@ -200,7 +237,7 @@ class Client
 
         // If no data has been returned but there's still links, then we're redirected to the ID based event.
         if (!isset($data->data) && !empty($data->links)) {
-            return $this->query(self::HORARO_HOST . $data->links[0]->uri, $parameters);
+            return $this->query(self::HORARO_HOST[$this->hostType] . $data->links[0]->uri, $parameters);
         }
         
         // Return false if no data is present in the reply (for example Internet is not accessible)
@@ -217,7 +254,7 @@ class Client
      * @param string $url The endpoint to query. Auto-magically builds the correct path.
      * @param array $parameters The parameters to give to the query, as a key-value array. Optionnal.
      *
-     * @return Resource The cURL resource representing the query.
+     * @return CurlHandle The cURL resource representing the query.
      */
     protected function buildQuery($url, array $parameters = [])
     {
@@ -231,8 +268,8 @@ class Client
         }
 
         // Build the URL if the host ain't there
-        if (strpos($url, self::HORARO_HOST) === false) {
-            $url = self::HORARO_BASEURL . trim($url, '/');
+        if (strpos($url, "https://") === false) {
+            $url = self::HORARO_HOST[$this->hostType] . self::HORARO_BASEPATH . trim($url, '/');
         }
 
         $curl = curl_init($url);

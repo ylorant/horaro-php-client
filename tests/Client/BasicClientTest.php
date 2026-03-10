@@ -11,7 +11,7 @@ class BasicClientTest extends TestCase
 
     public function testHoraroClient()
     {
-        $client = new Client();
+        $client = new Client(Client::HOST_LEGACY);
         $schedule = $client->getSchedule('speedcombo', 'sta-twitch');
 
         $this->assertIsObject($schedule);
@@ -21,7 +21,7 @@ class BasicClientTest extends TestCase
 
     public function testHiddenColumns()
     {
-        $client = new Client();
+        $client = new Client(Client::HOST_LEGACY);
         $schedule = $client->getSchedule('hsm2', 'sta-twitch', 'schwarzenegger');
 
         $expectedColumns = [
@@ -40,7 +40,7 @@ class BasicClientTest extends TestCase
 
     public function testAsyncRequest()
     {
-        $client = new Client();
+        $client = new Client(Client::HOST_LEGACY);
         $client->getScheduleAsync('hsm2', 'sta-twitch', 'schwarzenegger', [$this, 'asyncScheduleCallback']);
 
         while(empty($this->receivedReply)) {
@@ -60,6 +60,25 @@ class BasicClientTest extends TestCase
         $this->assertIsObject($schedule);
         $this->assertInstanceOf("stdClass", $schedule);
         $this->assertEquals("hsm2", $schedule->slug);
+        $this->assertEquals($expectedColumns, $schedule->columns);
+    }
+
+    public function testNewHost()
+    {
+        $client = new Client(Client::HOST_NEW);
+        $schedule = $client->getSchedule('2026', 'sta-all-stars');
+
+        $expectedColumns = [
+            "Runners",
+            "Game",
+            "Category",
+            "Type",
+            "Console"
+        ];
+
+        $this->assertIsObject($schedule);
+        $this->assertInstanceOf("stdClass", $schedule);
+        $this->assertEquals("2026", $schedule->slug);
         $this->assertEquals($expectedColumns, $schedule->columns);
     }
 
