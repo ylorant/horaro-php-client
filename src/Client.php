@@ -33,6 +33,8 @@ class Client
     protected $errorHandler;
     /** @var string The type of horaro website that will be queried */
     protected $hostType;
+    /** @var array The list of read response headers the last curl request */
+    protected $responseHeaders = [];
 
     /** Constructor.
      * The constructor initializes the curl asynchronous handler.
@@ -95,6 +97,34 @@ class Client
         }
     }
 
+    protected function handleCurlResponse($curl, $response)
+    {
+        $headersLength = curl_getinfo($curl, CURLINFO_HEADER_SIZE);
+        $headerSection = substr($response, 0, $headersLength);
+        $body = substr($response, $headersLength);
+
+        // Parse headers
+        $headers = [];
+        $headerSection = explode("\r\n", $headerSection);
+
+        foreach ($headerSection as $headerLine) {
+            $trimmed = trim($headerLine);
+
+            if(!empty($trimmed)) {
+                $split   = explode(':', $trimmed);
+
+                if(!empty($split[1])) {
+                    $headers[$split[0]] = trim($split[1]);
+                }
+            }
+        }
+
+        // Parse body
+        $body = json_decode($body);
+
+        return [$headers, $body];
+    }
+
     /** Listens for cURL asynchronous replies.
      * This method listens for replies on the pending queries. Upon completion of one of them, it'll
      * execute the associated callback and remove it from the pending queries.
@@ -130,9 +160,22 @@ class Client
                     break;
                 }
 
+                $this->responseHeaders = [];
+                
                 $reply = curl_multi_getcontent($curlInfo['handle']);
-                $data = json_decode($reply);
+                $replyCode = curl_getinfo($curlInfo['handle'], CURLINFO_HTTP_CODE);
+                
+                [$headers, $data] = $this->handleCurlResponse($curlInfo['handle'], $reply);
 
+                if ($replyCode == 302 && empty($data)) {
+                    $this->queryAsync(
+                        self::HORARO_HOST[$this->hostType] . $headers['location'],
+                        $request['params'],
+                        $request['cb'],
+                        $request['cbParams']
+                    );
+                    break;
+                }
 
                 // If there's a status replied and it's not 200 (HTTP OK),
                 //then it's an error and we trigger the error handler
@@ -205,30 +248,16 @@ class Client
     public function query($url, array $parameters = [])
     {
         $curl = $this->buildQuery($url, $parameters);
-        $parsedHeaders = [];
-
-        curl_setopt($curl, CURLOPT_HEADERFUNCTION, function($curl, $headerLine) use(&$parsedHeaders) {
-            $trimmed = trim($headerLine);
-
-            if(!empty($trimmed)) {
-                $split   = explode(':', $trimmed);
-
-                if(!empty($split[1])) {
-                    $parsedHeaders[$split[0]] = trim($split[1]);
-                }
-            }
-
-            return strlen($headerLine);
-        });
 
         $reply = curl_exec($curl);
         $replyCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 
-        if ($replyCode == 302 && empty($data)) {
-            return $this->query(self::HORARO_HOST[$this->hostType] . $parsedHeaders['location'], $parameters);
-        }
+        // Extract headers from response
+        [$headers, $data] = $this->handleCurlResponse($curl, $reply);
 
-        $data = json_decode($reply);
+        if ($replyCode == 302 && empty($data)) {
+            return $this->query(self::HORARO_HOST[$this->hostType] . $headers['location'], $parameters);
+        }
 
         // If there's a status replied and it's not 200 (HTTP OK), then it's an error and we return false
         if (!empty($data->status) && $data->status != 200) {
@@ -280,6 +309,7 @@ class Client
             [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_CUSTOMREQUEST => "GET",
+                CURLOPT_HEADER => true,
                 CURLOPT_HTTPHEADER => [
                     "Accept: " . self::RETURN_MIMETYPE
                 ]

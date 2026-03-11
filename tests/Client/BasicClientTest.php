@@ -82,6 +82,31 @@ class BasicClientTest extends TestCase
         $this->assertEquals($expectedColumns, $schedule->columns);
     }
 
+    public function testNewHostAsync()
+    {
+        $client = new Client(Client::HOST_NEW);
+        $client->getScheduleAsync('2026', 'sta-all-stars', 'hiddencolumns', [$this, 'asyncScheduleCallback']);
+
+        while(empty($this->receivedReply)) {
+            $client->asyncListen();
+        }
+
+        $expectedColumns = [
+            "Runners",
+            "Game",
+            "Category",
+            "Type",
+            "Console"
+        ];
+
+        $schedule = $this->receivedReply;
+
+        $this->assertIsObject($schedule);
+        $this->assertInstanceOf("stdClass", $schedule);
+        $this->assertEquals("2026", $schedule->slug);
+        $this->assertEquals($expectedColumns, $schedule->columns);
+    }
+
     public function asyncScheduleCallback($scheduleId, $eventId, $schedule)
     {
         $this->receivedReply = $schedule;
